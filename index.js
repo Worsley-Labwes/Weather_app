@@ -1,99 +1,137 @@
+// DOM Elements
 const weatherForm = document.querySelector(".weatherForm");
 const cityInput = document.querySelector(".cityInput");
 const card = document.querySelector(".card");
-const apikey = "adcbea262d8cc07d77954c272ca1c83d";
 
-weatherForm.addEventListener("submit",async event=>{
+// API Configuration
+const API_CONFIG = {
+    BASE_URL: "https://api.openweathermap.org/data/2.5/weather",
+    API_KEY: "adcbea262d8cc07d77954c272ca1c83d",
+    UNITS: "metric"
+};
 
+// Weather ID to Emoji Mapping
+const WEATHER_EMOJI_MAP = {
+    thunderstorm: "⛈️",
+    drizzle: "🌧️",
+    rain: "🌧️",
+    snow: "❄️",
+    mist: "🌫️",
+    clear: "☀️",
+    clouds: "☁️"
+};
+
+// Event Listeners
+weatherForm.addEventListener("submit", handleFormSubmit);
+cityInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") handleFormSubmit(e);
+});
+
+/**
+ * Handle form submission
+ * @param {Event} event - Form submission event
+ */
+async function handleFormSubmit(event) {
     event.preventDefault();
-
-    const city = cityInput.value;
-
-    if(city){
-        try{
-            const weatherData = await getWeatherData(city);
-            displayWeatherInfor(weatherData);
-        }
-        catch(error){
-            console.log(error);
-            displayError(error);
-        }
-
-    }
-    else{
-        displayError("Please enter a city name");
-    }
-})
-async function getWeatherData(city){
-
-    const apiurl = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apikey}`);
-
-    if(!apiurl.ok){
-        throw new Error("could not fetch weather data");
-    }
-
-    const data = await apiurl.json();
-    return data;
-}
-function displayWeatherInfor(data){
-    const {name: city, 
-           main: {temp, humidity}, 
-           weather:[{description, id}]} = data;
     
-    card.textContent = "";
+    const city = cityInput.value.trim();
+    
+    if (!city) {
+        displayError("Please enter a city name");
+        return;
+    }
+
+    try {
+        const weatherData = await getWeatherData(city);
+        displayWeatherInfo(weatherData);
+        cityInput.value = "";
+    } catch (error) {
+        console.error("Weather fetch error:", error);
+        displayError(error.message || "Could not fetch weather data. Please check the city name and try again.");
+    }
+}
+
+/**
+ * Fetch weather data from OpenWeatherMap API
+ * @param {string} city - City name
+ * @returns {Promise<Object>} Weather data
+ * @throws {Error} If API request fails
+ */
+async function getWeatherData(city) {
+    const url = new URL(API_CONFIG.BASE_URL);
+    url.searchParams.append("q", city);
+    url.searchParams.append("appid", API_CONFIG.API_KEY);
+    url.searchParams.append("units", API_CONFIG.UNITS);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        if (response.status === 404) {
+            throw new Error("City not found. Please check the spelling and try again.");
+        }
+        throw new Error("Unable to fetch weather data. Please try again later.");
+    }
+
+    return await response.json();
+}
+
+/**
+ * Display weather information on the card
+ * @param {Object} data - Weather data from API
+ */
+function displayWeatherInfo(data) {
+    const { name: city, sys: { country }, main: { temp, feels_like, humidity }, weather: [{ description, main }] } = data;
+    
+    card.innerHTML = "";
     card.style.display = "flex";
 
-    const cityDisplay = document.createElement("h1");
-    const tempDisplay = document.createElement("p");
-    const humidityDisplay = document.createElement("p");
-    const descDisplay = document.createElement("p");
-    const weatherEmoji = document.createElement("p");
+    const cityDisplay = createElement("div", "cityDisplay", `${city}, ${country}`);
+    const tempDisplay = createElement("div", "tempDisplay", `${Math.round(temp)}°C`);
+    const feelsLikeDisplay = createElement("p", "", `Feels like ${Math.round(feels_like)}°C`);
+    const humidityDisplay = createElement("p", "humidityDisplay", `Humidity: ${humidity}%`);
+    const descDisplay = createElement("p", "descDisplay", description);
+    const weatherEmoji = createElement("p", "weatherEmoji", getWeatherEmoji(main));
 
-    cityDisplay.textContent = city;
-    tempDisplay.textContent = `${((temp - 273.15) * 9/5 + 32).toFixed(1)}°F`;
-    humidityDisplay.textContent = `Humidity: ${humidity}%`;
-    descDisplay.textContent = description;
-    weatherEmoji.textContent = getWeatherEmoji(id);
-
-    cityDisplay.classList.add("cityDisplay");
-    tempDisplay.classList.add("tempDisplay");
-    humidityDisplay.classList.add("humidityDisplay");
-    descDisplay.classList.add("descDisplay");
-    weatherEmoji.classList.add("weatherEmoji");
-
+    card.appendChild(weatherEmoji);
     card.appendChild(cityDisplay);
     card.appendChild(tempDisplay);
+    card.appendChild(feelsLikeDisplay);
     card.appendChild(humidityDisplay);
     card.appendChild(descDisplay);
-    card.appendChild(weatherEmoji);
 }
 
-function getWeatherEmoji(weatherId){
-    switch(true){
-        case (weatherId>=200 && weatherId<300):
-            return "⛈️";
-        case (weatherId>=300 && weatherId<400):
-            return "🌧️";
-        case (weatherId>=500 && weatherId<600):
-            return "🌧️";
-        case (weatherId>=600 && weatherId<700):
-            return "❄️";
-        case (weatherId>=700 && weatherId<800):
-            return "🌫️";
-        case (weatherId==800):
-            return "☀️";
-        case (weatherId>801 && weatherId<810):
-            return "☁️";
-        default:
-            return "?";
-    }
+/**
+ 
+ * @param {string} tag - HTML tag name
+ * @param {string} className - CSS class name
+ * @param {string} textContent - Element text content
+ * @returns {HTMLElement} Created element
+ */
+function createElement(tag, className, textContent) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    element.textContent = textContent;
+    return element;
 }
-function displayError(message){
-    const errorDisplay = document.createElement("p");
-    errorDisplay.textContent = message;
-    errorDisplay.classList.add("errorDisplay");
 
-    card.textContent = "";
+/**
+ * Get weather emoji based on weather condition
+ * @param {string} weatherMain - Main weather condition
+ * @returns {string} Appropriate emoji
+ */
+function getWeatherEmoji(weatherMain) {
+    const main = weatherMain.toLowerCase();
+    return WEATHER_EMOJI_MAP[main] || "🌡️";
+}
+
+/**
+ * Display error message
+ * @param {string} message - Error message to display
+ */
+function displayError(message) {
+    card.innerHTML = "";
     card.style.display = "flex";
+    
+    const errorDisplay = createElement("p", "errorDisplay", message);
     card.appendChild(errorDisplay);
-    }
+}
